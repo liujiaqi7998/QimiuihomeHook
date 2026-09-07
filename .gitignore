@@ -2,6 +2,8 @@
 /analysis/
 /.hermes/
 /.local/
+/release-assets/
+/unsigned-release/
 **/verification/
 **/dist/
 **/captures/

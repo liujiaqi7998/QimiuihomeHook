@@ -4,7 +4,7 @@
 
 1. 使用 README 中的工具链，从 `mihome-hook/` 构建。
 2. 行为修改先编写失败测试，再实现；保留包/进程门控、反射预检和失败回退。
-3. 运行 `:app:testDebugUnitTest :app:lint :app:assembleDebug :app:assembleRelease`。
+3. 运行 `:app:testDebugUnitTest :app:lint :app:assembleDebug :app:assembleRelease`；从仓库根目录运行 `python3 -m unittest discover -s ci -v` 和 `python3 ci/release.py integrity`，验证发布工具与构建依赖。Windows 可将 python3 替换为 python。
 4. PR 说明实际运行的验证、未验证范围、对旧结构的影响。不要用测试替身通过来宣称真机兼容。
 
 ## 真机回归清单

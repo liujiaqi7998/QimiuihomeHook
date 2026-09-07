@@ -23,7 +23,7 @@
 
 ## 安装和使用
 
-1. 自行构建下面的 Debug APK，或使用你信任的发布来源。本仓库不提交 APK 或签名密钥。
+1. 从 [GitHub Releases](https://github.com/liujiaqi7998/QimiuihomeHook/releases) 下载正式签名 APK，或自行构建下面的 Debug APK。Git 历史不提交 APK 或签名密钥；Release 附带文件校验和与签名指纹。
 2. 安装模块，在 LSPosed 中启用，并确认作用域只勾选“系统桌面”。推荐作用域不会覆盖管理器中已有的历史选择。
 3. 重启桌面进程或重启设备，使已缓存的图标重新绑定。不要清除桌面数据。
 4. 对一个可安全测试的普通应用执行挂起：其图标应保持彩色，但启动仍受到系统限制。`pm suspend` 是挂起，`pm unsuspend` 是解除挂起。
@@ -58,6 +58,18 @@ cd QimiuihomeHook\mihome-hook
 | `app/build/outputs/apk/release/app-release-unsigned.apk` | 未签名，不能直接安装；发行前需使用自己保管的密钥签名 |
 
 Debug 证书不是生产身份保证；换机器构建时签名通常不同，可能无法直接覆盖更新。不要上传 debug keystore、生产密钥或带凭据的 Gradle 配置。
+
+正式 Release 使用项目独立且固定的发布密钥签名，公钥证书指纹固定在 `ci/release-certificate.sha256`。此前安装的 Debug 包与正式版签名不同：请先在 LSPosed 停用模块、卸载 Debug 包，再安装 Release 并重新启用作用域；之后正式版本之间使用同一签名，可正常覆盖升级。
+
+## CI 与自动发布
+
+- 普通 main 提交、Pull Request 和手动触发运行 CI：校验构建依赖、运行测试/Lint、构建 APK。
+- 推送 `vX.Y.Z` 标签触发 Release 流程；标签必须匹配构建得到的版本名称，提交必须来自 main 历史。
+- 发布流程通过质量门禁后，才在独立发布任务中使用 GitHub Actions Secrets 签名。PR 和普通 CI 不使用发布密钥。
+- APK 签名指纹、版本和对齐检查通过后创建草稿 Release；附件上传并下载回读校验成功才转为正式发布。已发布版本不会被自动覆盖。
+- 下载附件包括 APK、`SHA256SUMS` 和 `SIGNING-CERTIFICATE.txt`。自动发布成功不等于通过真机兼容性验证。
+
+维护者配置、签名备份和发布操作见 [发布指南](docs/RELEASING.md)。
 
 ## 验证状态
 
