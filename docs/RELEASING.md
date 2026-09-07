@@ -38,8 +38,8 @@ Fork 不会继承原仓库 secrets。维护者应使用自己的签名材料和�
 3. 给同一已验证提交创建标签并推送，例如：
 
 ```sh
-git tag -a v1.1.0 -m "Release v1.1.0"
-git push origin v1.1.0
+git tag -a v1.1.1 -m "Release v1.1.1"
+git push origin v1.1.1
 ```
 
 后续版本替换示例版本号，不要移动已经发布的标签。
@@ -56,7 +56,7 @@ git push origin v1.1.0
 使用 Android SDK 的工具检查 APK：
 
 ```sh
-apksigner verify --verbose --print-certs top.cyqi.hook.mihome-1.1.0.apk
+apksigner verify --verbose --print-certs top.cyqi.hook.mihome-1.1.1.apk
 ```
 
 输出的证书 SHA-256 应与仓库固定指纹及 Release 的 SIGNING-CERTIFICATE.txt 一致。Linux/macOS 可用 `sha256sum -c SHA256SUMS`（或等价 SHA-256 工具）核对文件摘要。

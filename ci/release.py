@@ -125,17 +125,28 @@ def publish(output, tag, repository, command=run):
     names = {f'{PACKAGE}-{tag[1:]}.apk', 'SHA256SUMS', 'SIGNING-CERTIFICATE.txt', 'release-notes.md'}
     if {p.name for p in output.iterdir()} != names or any(p.is_symlink() or not p.is_file() for p in output.iterdir()):
         raise ValueError('Unexpected release assets')
-    endpoint = f'repos/{repository}/releases/tags/{tag}'
-    try:
-        state = json.loads(command(['gh', 'api', endpoint]))
-    except CommandError as error:
-        if '(HTTP 404)' not in error.stderr:
-            raise
+    def find_release():
+        # The tag endpoint returns published releases only. List drafts with
+        # pagination, then address the selected release by its immutable ID.
+        pages = json.loads(command(['gh', 'api', f'repos/{repository}/releases?per_page=100',
+                                    '--paginate', '--slurp']))
+        if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+            raise ValueError('Invalid release list response')
+        matches = [release for page in pages for release in page if release.get('tag_name') == tag]
+        if len(matches) > 1:
+            raise ValueError('Multiple releases match this tag; refusing ambiguity')
+        return matches[0] if matches else None
+
+    state = find_release()
+    if state is None:
         command(['gh', 'release', 'create', tag, '--repo', repository, '--verify-tag', '--draft',
                  '--title', f'QimiuihomeHook {tag}', '--notes-file', output / 'release-notes.md'])
-        state = json.loads(command(['gh', 'api', endpoint]))
+        state = find_release()
+    if state is None:
+        raise ValueError('Created draft was not visible in release list')
     if state.get('draft') is not True or state.get('tag_name') != tag:
         raise ValueError('Refusing to overwrite an already published release or mismatched tag')
+    release_endpoint = f'repos/{repository}/releases/{state["id"]}'
     # Only a draft is replaceable. Unexpected old assets fail closed rather than leak into publication.
     if any(a['name'] not in names for a in state.get('assets', [])):
         raise ValueError('Existing draft contains unexpected assets; remove them explicitly')
@@ -143,7 +154,7 @@ def publish(output, tag, repository, command=run):
              '--title', f'QimiuihomeHook {tag}', '--notes-file', output / 'release-notes.md'])
     command(['gh', 'release', 'upload', tag, '--repo', repository, '--clobber',
              *[output / name for name in sorted(names)]])
-    state = json.loads(command(['gh', 'api', endpoint]))
+    state = json.loads(command(['gh', 'api', release_endpoint]))
     if state.get('draft') is not True or sorted(a['name'] for a in state.get('assets', [])) != sorted(names):
         raise ValueError('Draft upload readback failed')
     with tempfile.TemporaryDirectory(prefix='release-readback-') as tmp:
@@ -153,7 +164,6 @@ def publish(output, tag, repository, command=run):
         for name in names:
             if sha256(output / name) != sha256(Path(tmp) / name):
                 raise ValueError('Downloaded release asset checksum differs')
-    release_endpoint = f'repos/{repository}/releases/{state["id"]}'
     command(['gh', 'api', release_endpoint, '--method', 'PATCH', '-F', 'draft=false', '-F', 'prerelease=false'])
     state = json.loads(command(['gh', 'api', release_endpoint]))
     if state.get('draft') is not False or state.get('tag_name') != tag:

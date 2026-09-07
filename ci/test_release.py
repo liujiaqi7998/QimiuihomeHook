@@ -105,6 +105,41 @@ class PolicyTests(unittest.TestCase):
             with patch.dict(os.environ, env), self.assertRaises(ValueError):
                 r.sign(source, 'v1.1.0', root / 'out2', root / 'tools', cert, command=command)
 
+    def test_existing_draft_is_found_when_tag_endpoint_returns_404(self):
+        # GitHub's /releases/tags endpoint only exposes published releases.
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            names = ['top.cyqi.hook.mihome-1.1.0.apk', 'SHA256SUMS', 'SIGNING-CERTIFICATE.txt', 'release-notes.md']
+            for name in names:
+                (root / name).write_text(name)
+            state = {'id': 12, 'draft': True, 'prerelease': False, 'tag_name': 'v1.1.0', 'assets': []}
+            def command(args):
+                if args[1] == 'api':
+                    endpoint = args[2]
+                    if '/releases/tags/' in endpoint:
+                        raise r.CommandError('gh', subprocess.CompletedProcess(args, 1, '', 'gh: Not Found (HTTP 404)'))
+                    if '/releases?' in endpoint:
+                        self.assertIn('--paginate', args)
+                        self.assertIn('--slurp', args)
+                        return json.dumps([[{'id': 1, 'tag_name': 'v0.1.0'}], [state]])
+                    self.assertEqual(endpoint, 'repos/owner/repo/releases/12')
+                    if '--method' in args:
+                        state['draft'] = False
+                        state['prerelease'] = False
+                    return json.dumps(state)
+                if args[1:3] == ['release', 'create']:
+                    self.fail('Existing draft must not be recreated after a tag-endpoint 404')
+                if args[1:3] == ['release', 'upload']:
+                    state['assets'] = [{'name': n} for n in names]
+                if args[1:3] == ['release', 'download']:
+                    dest = Path(args[args.index('--dir') + 1])
+                    for file in root.iterdir():
+                        (dest / file.name).write_bytes(file.read_bytes())
+                return ''
+            r.publish(root, 'v1.1.0', 'owner/repo', command=command)
+            self.assertFalse(state['draft'])
+
     def test_publish_refuses_published_and_verifies_downloads_before_publish(self):
         self.assertTrue(hasattr(r, 'publish'), 'draft publishing is not implemented')
         with tempfile.TemporaryDirectory() as tmp:
@@ -116,6 +151,8 @@ class PolicyTests(unittest.TestCase):
             def command(args):
                 calls.append(args)
                 if args[1] == 'api':
+                    if '/releases?' in args[2]:
+                        return json.dumps([[state]])
                     if '--method' in args:
                         state['draft'] = False
                     return json.dumps(state)
@@ -146,20 +183,25 @@ class PolicyTests(unittest.TestCase):
             self.assertTrue(state['draft'])
             self.assertFalse(any('--method' in a for a in calls))
 
-    def test_new_draft_is_created_only_on_404(self):
+    def test_new_draft_is_created_only_after_successful_empty_list(self):
         import subprocess
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             names = ['top.cyqi.hook.mihome-1.1.0.apk', 'SHA256SUMS', 'SIGNING-CERTIFICATE.txt', 'release-notes.md']
             for name in names:
                 (root / name).write_text(name)
-            for status in [403, 404, 500]:
+            for status in [None, 403, 404, 500]:
                 calls = []
+                exists = [False]
                 state = {'id': 12, 'draft': True, 'tag_name': 'v1.1.0', 'assets': []}
                 def command(args):
                     calls.append(args)
-                    if len(calls) == 1:
-                        raise r.CommandError('gh', subprocess.CompletedProcess(args, 1, '', f'gh: error (HTTP {status})'))
+                    if args[1] == 'api' and '/releases?' in args[2]:
+                        if status is not None:
+                            raise r.CommandError('gh', subprocess.CompletedProcess(args, 1, '', f'gh: error (HTTP {status})'))
+                        return json.dumps([[state]] if exists[0] else [[]])
+                    if args[1:3] == ['release', 'create']:
+                        exists[0] = True
                     if args[1:3] == ['release', 'upload']:
                         state['assets'] = [{'name': n} for n in names]
                     if args[1:3] == ['release', 'download']:
@@ -170,7 +212,7 @@ class PolicyTests(unittest.TestCase):
                         state['draft'] = False
                     return json.dumps(state)
                 with self.subTest(status=status):
-                    if status == 404:
+                    if status is None:
                         r.publish(root, 'v1.1.0', 'owner/repo', command=command)
                         self.assertIn('--draft', calls[1])
                         self.assertIn('--verify-tag', calls[1])
@@ -178,6 +220,21 @@ class PolicyTests(unittest.TestCase):
                         with self.assertRaises(r.CommandError):
                             r.publish(root, 'v1.1.0', 'owner/repo', command=command)
                         self.assertEqual(len(calls), 1)
+
+    def test_release_list_ambiguity_and_wrong_shapes_fail_before_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ['top.cyqi.hook.mihome-1.1.0.apk', 'SHA256SUMS', 'SIGNING-CERTIFICATE.txt', 'release-notes.md']:
+                (root / name).write_text(name)
+            state = {'id': 12, 'draft': True, 'tag_name': 'v1.1.0', 'assets': []}
+            for payload in [[state], {'items': []}, [[state, state]]]:
+                calls = []
+                def command(args):
+                    calls.append(args)
+                    return json.dumps(payload)
+                with self.subTest(payload=payload), self.assertRaises(ValueError):
+                    r.publish(root, 'v1.1.0', 'owner/repo', command=command)
+                self.assertEqual(len(calls), 1)
 
     def test_command_errors_are_redacted_and_404_is_distinguishable(self):
         self.assertTrue(hasattr(r, 'CommandError'), 'safe command errors are not implemented')
