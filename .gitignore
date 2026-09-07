@@ -1,0 +1,67 @@
+# Private investigation inputs and local task history
+/analysis/
+/.hermes/
+/.local/
+**/verification/
+**/dist/
+**/captures/
+**/screenshots/
+**/recordings/
+**/logs/
+# Android / Gradle / IDE output
+**/.gradle/
+**/.kotlin/
+**/build/
+**/.idea/
+**/.vscode/
+*.iml
+local.properties
+*.hprof
+**/__pycache__/
+*.py[cod]
+# Proprietary binaries, archives and device dumps
+*.apk
+*.aab
+*.apks
+*.xapk
+*.zip
+*.7z
+*.dex
+*.odex
+*.vdex
+*.oat
+*.so
+*.dll
+*.exe
+*.db
+*.db-*
+*.sqlite*
+*.dump
+*.log
+*.log.*
+*.tmp
+*.part
+# Credentials / signing material / per-machine configuration
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pk8
+*.key
+*.pem
+id_rsa*
+id_ed25519*
+key.properties
+keystore.properties
+gradle-local.properties
+# Only these reviewed, required third-party JARs belong in Git
+*.jar
+!/mihome-hook/gradle/wrapper/gradle-wrapper.jar
+!/mihome-hook/libs/api-82.jar
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
