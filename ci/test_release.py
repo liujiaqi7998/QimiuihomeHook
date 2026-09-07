@@ -221,6 +221,38 @@ class PolicyTests(unittest.TestCase):
                             r.publish(root, 'v1.1.0', 'owner/repo', command=command)
                         self.assertEqual(len(calls), 1)
 
+    def test_new_draft_visibility_delay_does_not_recreate_draft(self):
+        from unittest.mock import patch, call
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            names = ['top.cyqi.hook.mihome-1.1.0.apk', 'SHA256SUMS', 'SIGNING-CERTIFICATE.txt', 'release-notes.md']
+            for name in names:
+                (root / name).write_text(name)
+            state = {'id': 12, 'draft': True, 'tag_name': 'v1.1.0', 'assets': []}
+            creates, reads = [], []
+            def command(args):
+                if args[1] == 'api' and '/releases?' in args[2]:
+                    if not creates:
+                        return '[[]]'
+                    reads.append(True)
+                    return json.dumps([[]] if len(reads) <= 2 else [[state]])
+                if args[1:3] == ['release', 'create']:
+                    creates.append(True)
+                if args[1:3] == ['release', 'upload']:
+                    state['assets'] = [{'name': name} for name in names]
+                if args[1:3] == ['release', 'download']:
+                    dest = Path(args[args.index('--dir') + 1])
+                    for file in root.iterdir():
+                        (dest / file.name).write_bytes(file.read_bytes())
+                if '--method' in args:
+                    state['draft'] = False
+                return json.dumps(state)
+            with patch('time.sleep') as sleep:
+                r.publish(root, 'v1.1.0', 'owner/repo', command=command)
+            self.assertEqual(len(creates), 1)
+            self.assertEqual(sleep.call_args_list, [call(1), call(2)])
+            self.assertFalse(state['draft'])
+
     def test_release_list_ambiguity_and_wrong_shapes_fail_before_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

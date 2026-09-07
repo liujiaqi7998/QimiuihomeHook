@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 
 PACKAGE = 'top.cyqi.hook.mihome'
 
@@ -141,7 +142,14 @@ def publish(output, tag, repository, command=run):
     if state is None:
         command(['gh', 'release', 'create', tag, '--repo', repository, '--verify-tag', '--draft',
                  '--title', f'QimiuihomeHook {tag}', '--notes-file', output / 'release-notes.md'])
-        state = find_release()
+        # Release-list visibility can lag behind a successful draft creation.
+        # Retry only a successful no-match read, never creation or API errors.
+        for attempt in range(5):
+            state = find_release()
+            if state is not None:
+                break
+            if attempt < 4:
+                time.sleep(2 ** attempt)
     if state is None:
         raise ValueError('Created draft was not visible in release list')
     if state.get('draft') is not True or state.get('tag_name') != tag:
